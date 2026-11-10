@@ -353,7 +353,7 @@ this.workerSrc)).WorkerMessageHandler})())}}class WorkerTransport{downloadInfoCa
 <script type="module">// PDF Notizen – Web-Version (Etappe 1)
 // Speichert im selben Format wie das Windows-Programm v1.20:
 //   Stift/Marker/Formen = Ink-Anmerkungen, Text = Form-XObject mit /PDFNotizen-JSON.
-const APP_VERSION = "Web 1.6";
+const APP_VERSION = "Web 1.7";
 const { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFString, PDFHexString, PDFNumber,
         PDFRawStream, StandardFonts, decodePDFRawStream } = PDFLib;
 const pdfjs = globalThis.pdfjsLib;
@@ -3467,6 +3467,8 @@ function buildTop() {
       ${ibtn("b-tab", "table", "Tabelle einfügen", { dark: true })}
       ${ibtn("b-lin", "ruler", "Lineal (U)", { dark: true })}
       ${ibtn("b-win", "protractor", "Winkelmesser (W)", { dark: true })}
+      ${ibtn("b-formel", "formula", "Formel einfügen", { dark: true })}
+      ${ibtn("b-sonder", "omega", "Sonderzeichen (α, π, ≤, √ …)", { dark: true })}
       <span class="vsep"></span>
       ${ibtn("b-split", "split", "Zwei Seiten nebeneinander (frei wählbar, auch aus zwei PDFs)", { dark: true })}
     </div>
@@ -3489,6 +3491,8 @@ function buildTop() {
   $("b-tab").onclick = () => { if (st.pages.length) newTable(); };
   $("b-lin").onclick = () => { toggleInstrument("lineal"); updateInstrBtns(); };
   $("b-win").onclick = () => { toggleInstrument("winkel"); updateInstrBtns(); };
+  $("b-formel").onclick = () => formulaDlg();
+  $("b-sonder").onclick = () => showSymbols();
   $("b-split").onclick = () => toggleSplit();
   document.querySelectorAll("#top [data-tool]").forEach(b => b.onclick = () => selectTool(b.dataset.tool));
   $("b-undo").onclick = undo; $("b-redo").onclick = redo;

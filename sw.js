@@ -1,5 +1,5 @@
 // Service Worker: laesst PDF Notizen auch ohne Internet starten (die Seite wird zwischengespeichert).
-const V = "pdfnotizen-Web-1.6";
+const V = "pdfnotizen-Web-1.7";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(V).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(
