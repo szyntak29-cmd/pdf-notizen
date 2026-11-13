@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scanner"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14161c">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Scanner</title>
+<style>
+:root{--bg:#14161c;--card:#1f232d;--card2:#2a2f3c;--tx:#eef0f6;--sub:#9aa1b4;--acc:#4f8cff;--ok:#3ddc84;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif;overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;border:0;background:var(--card2);border-radius:14px;padding:12px 16px;cursor:pointer}
+button.pri{background:var(--acc);color:#fff;font-weight:600}
+button:disabled{opacity:.4}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--bg);padding-top:var(--sat)}
+.screen.on{display:flex}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;flex:none}
+.bar h1{font-size:18px;margin:0;flex:1}
+.foot{display:flex;align-items:center;gap:10px;padding:12px 14px calc(12px + var(--sab));flex:none}
+.grow{flex:1}
+/* Start */
+#home{padding:calc(var(--sat) + 24px) 20px calc(var(--sab) + 20px);align-items:center;justify-content:center;gap:16px;text-align:center}
+#home img{width:96px;height:96px;border-radius:22px}
+#home h1{margin:4px 0 0;font-size:28px}
+#home p{margin:0;color:var(--sub);max-width:320px}
+#home .big{width:100%;max-width:340px;padding:18px;font-size:18px}
+#msstat{font-size:13px;color:var(--sub)}
+/* Kamera */
+#cam{background:#000}
+#camview{position:relative;flex:1;overflow:hidden;background:#000}
+#camview video,#camview canvas{position:absolute;inset:0;width:100%;height:100%}
+#camview video{object-fit:contain}
+#hint{position:absolute;left:0;right:0;top:10px;text-align:center;font-size:14px;text-shadow:0 1px 4px #000;pointer-events:none}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+.shutter{width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid #888;padding:0}
+.shutter:active{background:#ccc}
+.pill{background:rgba(255,255,255,.14);border-radius:999px;padding:10px 14px;font-size:14px}
+.pill.on{background:var(--ok);color:#06210f}
+.badge{background:var(--acc);border-radius:999px;padding:2px 9px;font-size:13px;margin-left:6px}
+/* Zuschneiden */
+#cropwrap{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+#stage{position:relative;touch-action:none}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#stage svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.h{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(79,140,255,.35);border:3px solid #fff;touch-action:none}
+.seg{display:flex;gap:6px;overflow-x:auto}
+.seg button{padding:9px 13px;font-size:14px;white-space:nowrap}
+.seg button.on{background:var(--acc);color:#fff}
+/* Seiten */
+#grid{flex:1;overflow:auto;padding:6px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-content:start}
+.card{background:var(--card);border-radius:14px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.card img{width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff;border-radius:8px}
+.card .row{display:flex;gap:6px}
+.card .row button{flex:1;padding:8px 0;font-size:15px;border-radius:10px}
+.card select{width:100%;background:var(--card2);color:var(--tx);border:0;border-radius:10px;padding:8px;font:inherit;font-size:14px}
+.card .n{font-size:12px;color:var(--sub);text-align:center}
+/* Dialoge */
+.mbg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.m{background:var(--card);width:100%;max-width:520px;border-radius:22px 22px 0 0;padding:18px 18px calc(18px + var(--sab));max-height:90%;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.m h2{margin:0;font-size:19px}
+.m input{width:100%;padding:12px;border-radius:12px;border:1px solid #3a4052;background:var(--bg);color:var(--tx);font:inherit}
+.m .sub{color:var(--sub);font-size:13px}
+.m .list{display:flex;flex-direction:column;gap:8px}
+.m .list button{text-align:left}
+.m .list small{display:block;color:var(--sub)}
+/* Ordner */
+#fold{z-index:40}
+#flist{flex:1;overflow:auto;padding:0 14px;display:flex;flex-direction:column;gap:6px}
+#flist button{text-align:left;background:var(--card)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + var(--sab));background:#000d;padding:10px 16px;border-radius:12px;z-index:99;max-width:88%;display:none;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- Start -->
+<div class="screen on" id="home">
+  <img src="icon-192.png" alt="">
+  <h1>Scanner</h1>
+  <p>Dokument fotografieren – wird automatisch erkannt, gerade ausgerichtet und als PDF in deinen OneDrive-Ordner gelegt.</p>
+  <button class="pri big" id="h-scan">Dokument scannen</button>
+  <button class="big" id="h-photo">Fotos aus der Mediathek</button>
+  <button class="big" id="h-pages" style="display:none"></button>
+  <div id="msstat"></div>
+  <button id="h-ms" style="font-size:14px;padding:8px 14px">OneDrive verbinden</button>
+</div>
+
+<!-- Kamera -->
+<div class="screen" id="cam">
+  <div class="bar"><button id="c-x">✕</button><span class="grow"></span><button class="pill" id="c-auto">Auto</button></div>
+  <div id="camview"><video id="vid" playsinline muted autoplay></video><canvas id="ov"></canvas><div id="hint">Dokument ins Bild halten</div><div id="flash"></div></div>
+  <div class="foot">
+    <button id="c-lib" class="pill">Mediathek</button>
+    <span class="grow" style="text-align:center"><button class="shutter" id="c-shot" aria-label="Aufnehmen"></button></span>
+    <button id="c-done" class="pill">Fertig<span class="badge" id="c-n">0</span></button>
+  </div>
+</div>
+
+<!-- Zuschneiden -->
+<div class="screen" id="crop">
+  <div class="bar"><h1>Ecken prüfen</h1><button id="r-rot">⟳ Drehen</button></div>
+  <div id="cropwrap"><div id="stage"><canvas id="cv"></canvas><svg id="sv"><polygon id="poly" fill="rgba(79,140,255,.18)" stroke="#4f8cff" stroke-width="3"/></svg></div></div>
+  <div class="foot">
+    <button id="r-back">Verwerfen</button>
+    <span class="grow"></span>
+    <button id="r-auto">Neu erkennen</button>
+    <button class="pri" id="r-ok">Übernehmen</button>
+  </div>
+</div>
+
+<!-- Seiten -->
+<div class="screen" id="pages">
+  <div class="bar"><button id="p-back">‹ Kamera</button><h1 id="p-title" style="text-align:center">Seiten</h1><button id="p-clear">Leeren</button></div>
+  <div id="grid"></div>
+  <div class="foot"><button id="p-more">+ Seite</button><span class="grow"></span><button class="pri" id="p-save">Als PDF ablegen</button></div>
+</div>
+
+<!-- OneDrive-Ordner wählen -->
+<div class="screen" id="fold">
+  <div class="bar"><button id="f-up">‹</button><h1 id="f-title">OneDrive</h1><button id="f-new">+ Ordner</button></div>
+  <div id="flist"></div>
+  <div class="foot"><button id="f-x">Abbrechen</button><span class="grow"></span><button class="pri" id="f-here">Hier speichern</button></div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fin" accept="image/*" multiple hidden>
+<input type="file" id="fcap" accept="image/*" capture="environment" hidden>
+
+<script>
+"use strict";
+// ======================================================================== Einstellungen
+// Anwendungs-(Client-)ID aus Microsoft Entra. Kann hier eingetragen oder in der App unter "OneDrive verbinden" gesetzt werden.
+const MS_CLIENT_ID = "";
+const MS_AUTH = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
+const MS_GRAPH = "https://graph.microsoft.com/v1.0";
+const MS_SCOPE = "Files.ReadWrite offline_access";
+const MAX_SRC = 3000;      // Kantenlaenge des Kamerabilds (Pixel)
+const MAX_OUT = 2400;      // Kantenlaenge der fertigen Seite
+
+const $ = (id) => document.getElementById(id);
+const S = { pages: [], src: null, quad: null, queue: [], fromCam: false, filter: localStorage.getItem("sc_filter") || "doc", stream: null, auto: localStorage.getItem("sc_auto") !== "0" };
+let toastT;
+function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toastT); toastT = setTimeout(() => t.style.display = "none", ms || 3500); }
+function show(id) { document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); if (id === "home") refreshHome(); }
+function dialog(html) {
+  const bg = document.createElement("div"); bg.className = "mbg"; bg.innerHTML = `<div class="m">${html}</div>`;
+  bg.addEventListener("click", (e) => { if (e.target === bg || e.target.hasAttribute("data-x")) bg.remove(); });
+  document.body.append(bg); return bg;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function ask(title, val, okText) {
+  return new Promise((res) => {
+    const bg = dialog(`<h2>${esc(title)}</h2><input id="a-in" autocomplete="off"><div style="display:flex;gap:10px;justify-content:flex-end"><button data-x>Abbrechen</button><button class="pri" id="a-ok">${okText || "OK"}</button></div>`);
+    const i = bg.querySelector("#a-in"); i.value = val || ""; setTimeout(() => { i.focus(); i.select(); }, 50);
+    let done = false; const fin = (v) => { if (!done) { done = true; bg.remove(); res(v); } };
+    bg.querySelector("#a-ok").onclick = () => fin(i.value.trim());
+    i.onkeydown = (e) => { if (e.key === "Enter") fin(i.value.trim()); };
+    new MutationObserver((_, o) => { if (!bg.isConnected) { o.disconnect(); fin(null); } }).observe(document.body, { childList: true });
+  });
+}
+
+// ======================================================================== Kantenerkennung (reines JavaScript)
+// Eingabe: RGBA-Daten eines verkleinerten Bildes. Ergebnis: 4 Ecken [[x,y]...] (0..1) im Uhrzeigersinn ab links oben, oder null.
+function detectQuad(rgba, w, h) {
+  const n = w * h;
+  let g = new Float32Array(n);
+  for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = 0.299 * rgba[j] + 0.587 * rgba[j + 1] + 0.114 * rgba[j + 2];
+  g = boxBlur(boxBlur(g, w, h), w, h);
+  const mag = new Float32Array(n); let mx = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    const gx = g[i - w + 1] + 2 * g[i + 1] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - 1] - g[i + w - 1];
+    const gy = g[i + w - 1] + 2 * g[i + w] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - w] - g[i - w + 1];
+    const m = Math.abs(gx) + Math.abs(gy); mag[i] = m; if (m > mx) mx = m;
+  }
+  if (mx < 40) return null;
+  // Schwelle: ca. die staerksten 9 % der Kanten, mindestens 12 % des Maximums
+  const hist = new Uint32Array(256); for (let i = 0; i < n; i++) hist[Math.min(255, (mag[i] / mx * 255) | 0)]++;
+  let acc = 0, th = 255; for (; th > 0; th--) { acc += hist[th]; if (acc > n * 0.09) break; }
+  const thr = Math.max(th / 255 * mx, 0.12 * mx);
+  let mask = new Uint8Array(n); for (let i = 0; i < n; i++) mask[i] = mag[i] >= thr ? 1 : 0;
+  mask = dilate(dilate(mask, w, h), w, h);
+  // Zusammenhaengende Flecken suchen, jeweils die 4 Eckpunkte (diagonale Extreme) merken
+  const lab = new Int32Array(n), stack = new Int32Array(n);
+  let best = null, bestA = 0;
+  for (let s = 0; s < n; s++) {
+    if (!mask[s] || lab[s]) continue;
+    let sp = 0, cnt = 0; stack[sp++] = s; lab[s] = 1;
+    let tl = s, tr = s, br = s, bl = s, vtl = 1e9, vbr = -1e9, vtr = -1e9, vbl = 1e9;
+    while (sp) {
+      const i = stack[--sp], x = i % w, y = (i / w) | 0; cnt++;
+      const a = x + y, b = x - y;
+      if (a < vtl) { vtl = a; tl = i; } if (a > vbr) { vbr = a; br = i; }
+      if (b > vtr) { vtr = b; tr = i; } if (b < vbl) { vbl = b; bl = i; }
+      if (x > 0 && mask[i - 1] && !lab[i - 1]) { lab[i - 1] = 1; stack[sp++] = i - 1; }
+      if (x < w - 1 && mask[i + 1] && !lab[i + 1]) { lab[i + 1] = 1; stack[sp++] = i + 1; }
+      if (y > 0 && mask[i - w] && !lab[i - w]) { lab[i - w] = 1; stack[sp++] = i - w; }
+      if (y < h - 1 && mask[i + w] && !lab[i + w]) { lab[i + w] = 1; stack[sp++] = i + w; }
+    }
+    if (cnt < n * 0.004) continue;
+    const q = [tl, tr, br, bl].map(i => [(i % w), ((i / w) | 0)]);
+    const A = polyArea(q) / n;
+    if (A < 0.12 || A > 0.97 || !isConvex(q)) continue;
+    const m = Math.min(w, h) * 0.18;
+    let ok = true; for (let k = 0; k < 4; k++) { const p = q[k], r = q[(k + 1) % 4]; if (Math.hypot(p[0] - r[0], p[1] - r[1]) < m) ok = false; }
+    if (!ok) continue;
+    if (A > bestA) { bestA = A; best = q; }
+  }
+  if (!best) return null;
+  // Die Kantenflaeche liegt ein paar Pixel ausserhalb des Blattes: Ecken leicht nach innen ziehen
+  const cx = best.reduce((a, p) => a + p[0], 0) / 4, cy = best.reduce((a, p) => a + p[1], 0) / 4, inset = 3.2 * w / 220;
+  return best.map(([x, y]) => { const dx = cx - x, dy = cy - y, l = Math.hypot(dx, dy) || 1; return [(x + dx / l * inset) / (w - 1), (y + dy / l * inset) / (h - 1)]; });
+}
+function boxBlur(a, w, h) {
+  const o = new Float32Array(a.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0, c = 0;
+    for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= h) continue; for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= w) continue; s += a[yy * w + xx]; c++; } }
+    o[y * w + x] = s / c;
+  }
+  return o;
+}
+function dilate(m, w, h) {
+  const o = new Uint8Array(m.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    o[i] = (m[i] || (x > 0 && m[i - 1]) || (x < w - 1 && m[i + 1]) || (y > 0 && m[i - w]) || (y < h - 1 && m[i + w])) ? 1 : 0;
+  }
+  return o;
+}
+function polyArea(q) { let s = 0; for (let i = 0; i < q.length; i++) { const a = q[i], b = q[(i + 1) % q.length]; s += a[0] * b[1] - b[0] * a[1]; } return Math.abs(s) / 2; }
+function isConvex(q) {
+  let sg = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4], c = q[(i + 2) % 4];
+    const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    if (Math.abs(cr) < 1e-6) return false;
+    if (sg && Math.sign(cr) !== sg) return false; sg = Math.sign(cr);
+  }
+  return true;
+}
+function detectOnCanvas(cv, width) {
+  const w = width || 220, h = Math.max(1, Math.round(cv.height * w / cv.width));
+  const t = document.createElement("canvas"); t.width = w; t.height = h;
+  const c = t.getContext("2d", { willReadFrequently: true }); c.drawImage(cv, 0, 0, w, h);
+  return detectQuad(c.getImageData(0, 0, w, h).data, w, h);
+}
+const defaultQuad = () => [[.08, .08], [.92, .08], [.92, .92], [.08, .92]];
+
+// ======================================================================== Perspektive geradeziehen
+function squareToQuad(p) {   // Einheitsquadrat (0,0)(1,0)(1,1)(0,1) -> Viereck p0..p3
+  const [x0, y0] = p[0], [x1, y1] = p[1], [x2, y2] = p[2], [x3, y3] = p[3];
+  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3, dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  let g = 0, hh = 0;
+  if (Math.abs(dx3) > 1e-9 || Math.abs(dy3) > 1e-9) {
+    const den = dx1 * dy2 - dx2 * dy1;
+    g = (dx3 * dy2 - dx2 * dy3) / den; hh = (dx1 * dy3 - dx3 * dy1) / den;
+  }
+  return { a: x1 - x0 + g * x1, b: x3 - x0 + hh * x3, c: x0, d: y1 - y0 + g * y1, e: y3 - y0 + hh * y3, f: y0, g, h: hh };
+}
+function warpQuad(srcCv, quadN) {
+  const sw = srcCv.width, sh = srcCv.height;
+  const q = quadN.map(([x, y]) => [x * sw, y * sh]);
+  const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  let W = (len(q[0], q[1]) + len(q[3], q[2])) / 2, H = (len(q[0], q[3]) + len(q[1], q[2])) / 2;
+  const k = Math.min(1, MAX_OUT / Math.max(W, H)); W = Math.max(16, Math.round(W * k)); H = Math.max(16, Math.round(H * k));
+  const M = squareToQuad(q);
+  const sd = srcCv.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, sw, sh).data;
+  const out = new ImageData(W, H), od = out.data;
+  for (let y = 0; y < H; y++) {
+    const v = (y + 0.5) / H;
+    for (let x = 0; x < W; x++) {
+      const u = (x + 0.5) / W, d = M.g * u + M.h * v + 1;
+      let fx = (M.a * u + M.b * v + M.c) / d - 0.5, fy = (M.d * u + M.e * v + M.f) / d - 0.5;
+      fx = fx < 0 ? 0 : fx > sw - 1.001 ? sw - 1.001 : fx; fy = fy < 0 ? 0 : fy > sh - 1.001 ? sh - 1.001 : fy;
+      const x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, i = (y0 * sw + x0) * 4, o = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const t = sd[i + c] * (1 - ax) + sd[i + 4 + c] * ax, b = sd[i + sw * 4 + c] * (1 - ax) + sd[i + sw * 4 + 4 + c] * ax;
+        od[o + c] = t * (1 - ay) + b * ay;
+      }
+      od[o + 3] = 255;
+    }
+  }
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H; cv.getContext("2d").putImageData(out, 0, 0);
+  return cv;
+}
+
+// ======================================================================== Filter (Papier weiss, Schrift kraeftig)
+function applyFilter(cv, mode) {
+  if (mode === "orig") return cv;
+  const w = cv.width, h = cv.height, ctx = cv.getContext("2d", { willReadFrequently: true });
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  // Hintergrund (Papierhelligkeit) je Block: Mittel der helleren Haelfte, danach geglaettet
+  const B = Math.max(8, Math.round(Math.max(w, h) / 40)), bw = Math.ceil(w / B), bh = Math.ceil(h / B);
+  let bg = new Float32Array(bw * bh);
+  for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+    let s = 0, c = 0; const x1 = Math.min(w, (bx + 1) * B), y1 = Math.min(h, (by + 1) * B);
+    for (let y = by * B; y < y1; y += 2) for (let x = bx * B; x < x1; x += 2) { const i = (y * w + x) * 4; s += d[i] * .299 + d[i + 1] * .587 + d[i + 2] * .114; c++; }
+    const m = s / c; let s2 = 0, c2 = 0;
+    for (let y = by * B; y < y1; y += 2) for (let x = bx * B; x < x1; x += 2) { const i = (y * w + x) * 4, v = d[i] * .299 + d[i + 1] * .587 + d[i + 2] * .114; if (v >= m) { s2 += v; c2++; } }
+    bg[by * bw + bx] = c2 ? s2 / c2 : m;
+  }
+  bg = boxBlur(bg, bw, bh);
+  const lo = mode === "bw" ? 0.78 : 0.5, hi = mode === "bw" ? 0.78001 : 0.93;
+  for (let y = 0; y < h; y++) {
+    const gy = Math.min(bh - 1.001, Math.max(0, y / B - 0.5)), y0 = gy | 0, ay = gy - y0;
+    for (let x = 0; x < w; x++) {
+      const gx = Math.min(bw - 1.001, Math.max(0, x / B - 0.5)), x0 = gx | 0, ax = gx - x0, k = y0 * bw + x0;
+      const b = Math.max(40, (bg[k] * (1 - ax) + bg[k + 1] * ax) * (1 - ay) + (bg[k + bw] * (1 - ax) + bg[k + bw + 1] * ax) * ay);
+      const i = (y * w + x) * 4;
+      let r = d[i], g = d[i + 1], bl = d[i + 2];
+      if (mode === "bw" || mode === "gray") { r = g = bl = r * .299 + g * .587 + bl * .114; }
+      for (let c = 0; c < 3; c++) {
+        const v = ((c === 0 ? r : c === 1 ? g : bl) / b - lo) / (hi - lo);
+        d[i + c] = v <= 0 ? 0 : v >= 1 ? 255 : v * 255;
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0); return cv;
+}
+function cloneCanvas(cv, maxW) {
+  const k = maxW ? Math.min(1, maxW / cv.width) : 1, c = document.createElement("canvas");
+  c.width = Math.round(cv.width * k); c.height = Math.round(cv.height * k);
+  const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high"; x.drawImage(cv, 0, 0, c.width, c.height); return c;
+}
+function rotateCanvas(cv, times) {
+  times = ((times % 4) + 4) % 4; if (!times) return cv;
+  const c = document.createElement("canvas"), sw = times % 2;
+  c.width = sw ? cv.height : cv.width; c.height = sw ? cv.width : cv.height;
+  const x = c.getContext("2d"); x.translate(c.width / 2, c.height / 2); x.rotate(times * Math.PI / 2); x.drawImage(cv, -cv.width / 2, -cv.height / 2); return c;
+}
+const toBlob = (cv, q) => new Promise((r) => cv.toBlob(r, "image/jpeg", q || 0.88));
+
+// ======================================================================== PDF schreiben (ohne Bibliothek, JPEG direkt eingebettet)
+async function buildPdf(pages) {
+  const enc = new TextEncoder(), chunks = [], offs = []; let len = 0;
+  const put = (x) => { const b = typeof x === "string" ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const obj = (n, head, stream) => { offs[n] = len; put(`${n} 0 obj\n${head}`); if (stream) { put("\nstream\n"); put(stream); put("\nendstream"); } put("\nendobj\n"); };
+  put("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+  const N = pages.length, kids = pages.map((_, i) => `${3 + i * 3} 0 R`).join(" ");
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${N} >>`);
+  for (let i = 0; i < N; i++) {
+    const p = pages[i], long = 841.89, land = p.w > p.h, asp = Math.min(p.w, p.h) / Math.max(p.w, p.h);
+    const PW = +(land ? long : long * asp).toFixed(2), PH = +(land ? long * asp : long).toFixed(2), id = 3 + i * 3;
+    obj(id, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Contents ${id + 1} 0 R /Resources << /XObject << /Im0 ${id + 2} 0 R >> >> >>`);
+    const cs = `q ${PW} 0 0 ${PH} 0 0 cm /Im0 Do Q`;
+    obj(id + 1, `<< /Length ${cs.length} >>`, cs);
+    obj(id + 2, `<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpg.length} >>`, p.jpg);
+  }
+  const total = 2 + N * 3, xr = len;
+  put(`xref\n0 ${total + 1}\n0000000000 65535 f \n`);
+  for (let i = 1; i <= total; i++) put(String(offs[i]).padStart(10, "0") + " 00000 n \n");
+  put(`trailer\n<< /Size ${total + 1} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF\n`);
+  const out = new Uint8Array(len); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; } return out;
+}
+async function exportPdf() {
+  const list = [];
+  for (const p of S.pages) {
+    let cv = await blobToCanvas(p.blob); cv = rotateCanvas(cv, p.rot); applyFilter(cv, p.filter);
+    const b = await toBlob(cv, 0.88); list.push({ w: cv.width, h: cv.height, jpg: new Uint8Array(await b.arrayBuffer()) });
+    cv.width = cv.height = 1;
+  }
+  return buildPdf(list);
+}
+async function blobToCanvas(blob) {
+  let bmp; try { bmp = await createImageBitmap(blob, { imageOrientation: "from-image" }); } catch (e) { bmp = await createImageBitmap(blob); }
+  const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0); if (bmp.close) bmp.close(); return c;
+}
+
+// ======================================================================== Kamera
+const vid = $("vid"), ov = $("ov");
+let camLoop = 0, stable = 0, lastQ = null, shooting = false;
+async function openCamera() {
+  show("cam"); $("c-n").textContent = S.pages.length; paintAuto();
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
+  } catch (e) {
+    show("home"); toast("Kamera nicht verfügbar – ich öffne die Kamera-App.", 4500); setTimeout(() => $("fcap").click(), 300); return;
+  }
+  vid.srcObject = S.stream; try { await vid.play(); } catch (e) {}
+  stable = 0; lastQ = null; shooting = false;
+  clearInterval(camLoop); camLoop = setInterval(camTick, 230);
+}
+function closeCamera() { clearInterval(camLoop); if (S.stream) S.stream.getTracks().forEach(t => t.stop()); S.stream = null; vid.srcObject = null; }
+function paintAuto() { $("c-auto").classList.toggle("on", S.auto); $("c-auto").textContent = S.auto ? "Auto ✓" : "Auto aus"; }
+const tmp = document.createElement("canvas");
+function camTick() {
+  if (!vid.videoWidth || shooting) return;
+  const vw = vid.videoWidth, vh = vid.videoHeight, W = 200, H = Math.round(W * vh / vw);
+  tmp.width = W; tmp.height = H; const c = tmp.getContext("2d", { willReadFrequently: true }); c.drawImage(vid, 0, 0, W, H);
+  const q = detectQuad(c.getImageData(0, 0, W, H).data, W, H);
+  const cw = ov.clientWidth, ch = ov.clientHeight; if (ov.width !== cw) { ov.width = cw; ov.height = ch; }
+  const k = Math.min(cw / vw, ch / vh), dw = vw * k, dh = vh * k, ox = (cw - dw) / 2, oy = (ch - dh) / 2;
+  const g = ov.getContext("2d"); g.clearRect(0, 0, cw, ch);
+  if (q) {
+    let move = 1; if (lastQ) move = Math.max(...q.map((p, i) => Math.hypot(p[0] - lastQ[i][0], p[1] - lastQ[i][1])));
+    stable = move < 0.03 ? stable + 1 : 0; lastQ = q;
+    const ready = stable >= 2;
+    g.beginPath(); q.forEach(([x, y], i) => i ? g.lineTo(ox + x * dw, oy + y * dh) : g.moveTo(ox + x * dw, oy + y * dh)); g.closePath();
+    g.fillStyle = ready ? "rgba(61,220,132,.25)" : "rgba(79,140,255,.2)"; g.fill();
+    g.lineWidth = 4; g.strokeStyle = ready ? "#3ddc84" : "#4f8cff"; g.stroke();
+    $("hint").textContent = S.auto ? (stable >= 6 ? "Halten …" : "Dokument erkannt") : "Dokument erkannt";
+    if (S.auto && stable >= 7) snap();
+  } else { stable = 0; lastQ = null; $("hint").textContent = "Dokument ins Bild halten – möglichst auf dunklem Untergrund"; }
+}
+function snap() {
+  if (shooting || !vid.videoWidth) return; shooting = true;
+  const vw = vid.videoWidth, vh = vid.videoHeight, k = Math.min(1, MAX_SRC / Math.max(vw, vh));
+  const cv = document.createElement("canvas"); cv.width = Math.round(vw * k); cv.height = Math.round(vh * k);
+  cv.getContext("2d").drawImage(vid, 0, 0, cv.width, cv.height);
+  const f = $("flash"); f.style.opacity = .8; setTimeout(() => f.style.opacity = 0, 120);
+  if (navigator.vibrate) navigator.vibrate(30);
+  closeCamera(); S.fromCam = true; openCrop(cv);
+}
+$("c-shot").onclick = snap;
+$("c-auto").onclick = () => { S.auto = !S.auto; localStorage.setItem("sc_auto", S.auto ? "1" : "0"); paintAuto(); stable = 0; };
+$("c-x").onclick = () => { closeCamera(); show(S.pages.length ? "pages" : "home"); };
+$("c-done").onclick = () => { closeCamera(); S.pages.length ? openPages() : show("home"); };
+$("c-lib").onclick = () => { closeCamera(); pickPhotos(); };
+
+// ======================================================================== Bilder aus Mediathek / Kamera-App
+function pickPhotos() { $("fin").value = ""; $("fin").click(); }
+$("fin").onchange = (e) => queueFiles([...e.target.files]);
+$("fcap").onchange = (e) => queueFiles([...e.target.files]);
+async function queueFiles(files) {
+  if (!files.length) { if (S.pages.length) openPages(); else show("home"); return; }
+  S.queue = files; S.fromCam = false; nextQueued();
+}
+async function nextQueued() {
+  const f = S.queue.shift();
+  if (!f) { S.pages.length ? openPages() : show("home"); return; }
+  try {
+    const cv = await blobToCanvas(f), k = Math.min(1, MAX_SRC / Math.max(cv.width, cv.height));
+    openCrop(k < 1 ? cloneCanvas(cv, Math.round(cv.width * k)) : cv);
+  } catch (e) { toast("Bild konnte nicht gelesen werden."); nextQueued(); }
+}
+
+// ======================================================================== Ecken pruefen / anpassen
+const stage = $("stage"), cv = $("cv"), hs = [];
+function openCrop(srcCv) {
+  S.src = srcCv; show("crop");
+  S.quad = detectOnCanvas(srcCv) || defaultQuad();
+  requestAnimationFrame(layoutCrop);
+}
+function layoutCrop() {
+  const wrap = $("cropwrap"), pad = 28, aw = wrap.clientWidth - pad, ah = wrap.clientHeight - pad;
+  const k = Math.min(aw / S.src.width, ah / S.src.height), w = Math.round(S.src.width * k), h = Math.round(S.src.height * k);
+  stage.style.width = w + "px"; stage.style.height = h + "px";
+  const pv = cloneCanvas(S.src, Math.min(1400, S.src.width)); cv.width = pv.width; cv.height = pv.height; cv.getContext("2d").drawImage(pv, 0, 0);
+  hs.forEach(e => e.remove()); hs.length = 0;
+  for (let i = 0; i < 4; i++) {
+    const el = document.createElement("div"); el.className = "h"; stage.append(el); hs.push(el);
+    el.addEventListener("pointerdown", (ev) => {
+      el.setPointerCapture(ev.pointerId);
+      const mv = (e) => { const r = stage.getBoundingClientRect(); S.quad[i] = [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; drawQuad(); };
+      const up = () => { el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up); };
+      el.addEventListener("pointermove", mv); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+    });
+  }
+  drawQuad();
+}
+function drawQuad() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  $("poly").setAttribute("points", S.quad.map(([x, y]) => `${x * w},${y * h}`).join(" "));
+  S.quad.forEach(([x, y], i) => { hs[i].style.left = x * w + "px"; hs[i].style.top = y * h + "px"; });
+}
+window.addEventListener("resize", () => { if ($("crop").classList.contains("on")) layoutCrop(); });
+$("r-auto").onclick = () => { const q = detectOnCanvas(S.src); if (q) { S.quad = q; drawQuad(); } else { S.quad = defaultQuad(); drawQuad(); toast("Keine Kanten gefunden – Ecken bitte selbst ziehen."); } };
+$("r-rot").onclick = () => { S.src = rotateCanvas(S.src, 1); S.quad = [S.quad[3], S.quad[0], S.quad[1], S.quad[2]].map(([x, y]) => [1 - y, x]); layoutCrop(); };
+$("r-back").onclick = () => { if (S.fromCam) openCamera(); else nextQueued(); };
+$("r-ok").onclick = async () => {
+  $("r-ok").disabled = true; await new Promise(r => setTimeout(r, 30));
+  try {
+    const cvw = warpQuad(S.src, S.quad), blob = await toBlob(cvw, 0.92);
+    addPage({ blob, small: cloneCanvas(cvw, 420), filter: S.filter, rot: 0 });
+  } catch (e) { toast("Fehler beim Geradeziehen: " + e.message); }
+  $("r-ok").disabled = false; S.src = null;
+  if (S.fromCam) openCamera(); else nextQueued();
+};
+function addPage(p) { S.pages.push(p); }
+
+// ======================================================================== Seitenuebersicht
+const FILTERS = [["doc", "Dokument"], ["gray", "Grau"], ["bw", "Schwarz-Weiß"], ["orig", "Original"]];
+function thumbUrl(p) { const c = rotateCanvas(cloneCanvas(p.small), p.rot); applyFilter(c, p.filter); return c.toDataURL("image/jpeg", 0.8); }
+function openPages() {
+  show("pages"); $("p-title").textContent = S.pages.length + (S.pages.length === 1 ? " Seite" : " Seiten");
+  const g = $("grid"); g.innerHTML = "";
+  S.pages.forEach((p, i) => {
+    const d = document.createElement("div"); d.className = "card";
+    d.innerHTML = `<img src="${thumbUrl(p)}" alt=""><select>${FILTERS.map(([k, l]) => `<option value="${k}"${k === p.filter ? " selected" : ""}>${l}</option>`).join("")}</select>
+      <div class="row"><button data-a="l">◀</button><button data-a="r">⟳</button><button data-a="d">🗑</button><button data-a="n">▶</button></div><div class="n">Seite ${i + 1}</div>`;
+    d.querySelector("select").onchange = (e) => { p.filter = e.target.value; S.filter = p.filter; localStorage.setItem("sc_filter", S.filter); d.querySelector("img").src = thumbUrl(p); };
+    d.querySelector(".row").onclick = (e) => {
+      const a = e.target.dataset.a; if (!a) return;
+      if (a === "r") p.rot = (p.rot + 1) % 4;
+      if (a === "d") S.pages.splice(i, 1);
+      if (a === "l" && i > 0) [S.pages[i - 1], S.pages[i]] = [S.pages[i], S.pages[i - 1]];
+      if (a === "n" && i < S.pages.length - 1) [S.pages[i + 1], S.pages[i]] = [S.pages[i], S.pages[i + 1]];
+      S.pages.length ? openPages() : show("home");
+    };
+    g.append(d);
+  });
+}
+$("p-back").onclick = openCamera; $("p-more").onclick = openCamera;
+$("p-clear").onclick = () => { if (confirm("Alle Seiten verwerfen?")) { S.pages = []; show("home"); } };
+$("p-save").onclick = saveDialog;
+
+// ======================================================================== OneDrive (Microsoft Graph, Anmeldung per PKCE – kein Server, kein Passwort)
+const msClientId = () => localStorage.getItem("sc_ms_cid") || MS_CLIENT_ID;
+const msRedirect = () => location.origin + location.pathname.replace(/index\.html$/, "");
+const msEnc = (s) => encodeURIComponent(s);
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const msTok = () => { try { return JSON.parse(localStorage.getItem("sc_ms_tok") || "null"); } catch (e) { return null; } };
+const msLoggedIn = () => { const t = msTok(); return !!(t && (t.refresh || t.exp > Date.now())); };
+async function msLogin(after) {
+  if (!msClientId()) { msSetup(); return; }
+  const v = b64u(crypto.getRandomValues(new Uint8Array(32)));
+  const c = b64u(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  const state = b64u(crypto.getRandomValues(new Uint8Array(12)));
+  sessionStorage.setItem("sc_pkce", JSON.stringify({ v, state, redirect: msRedirect(), after: after || "" }));
+  location.href = MS_AUTH + "/authorize?" + new URLSearchParams({ client_id: msClientId(), response_type: "code", redirect_uri: msRedirect(), response_mode: "query", scope: MS_SCOPE, state, code_challenge: c, code_challenge_method: "S256", prompt: "select_account" });
+}
+async function msTokenRequest(params) {
+  const r = await fetch(MS_AUTH + "/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: msClientId(), scope: MS_SCOPE, ...params }) });
+  const j = await r.json();
+  if (!r.ok || !j.access_token) throw new Error(j.error_description ? j.error_description.split("\r")[0] : (j.error || r.status));
+  const old = msTok() || {};
+  localStorage.setItem("sc_ms_tok", JSON.stringify({ access: j.access_token, refresh: j.refresh_token || old.refresh || null, exp: Date.now() + (j.expires_in || 3600) * 1000 }));
+}
+async function msHandleRedirect() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("code") && !q.has("error")) return;
+  const saved = JSON.parse(sessionStorage.getItem("sc_pkce") || "null");
+  history.replaceState(null, "", location.pathname);
+  if (q.has("error")) { toast("Anmeldung abgebrochen: " + (q.get("error_description") || q.get("error")), 8000); return; }
+  if (!saved || saved.state !== q.get("state")) { toast("Ungültige Antwort – bitte nochmal versuchen.", 8000); return; }
+  sessionStorage.removeItem("sc_pkce");
+  try {
+    await msTokenRequest({ grant_type: "authorization_code", code: q.get("code"), redirect_uri: saved.redirect, code_verifier: saved.v });
+    toast("Bei OneDrive angemeldet ✓", 2500);
+    if (saved.after === "save") { await restorePending(); if (S.pages.length) { openPages(); saveDialog(); } }
+  } catch (e) { toast("Anmeldung fehlgeschlagen: " + e.message, 9000); }
+}
+async function msToken() {
+  const t = msTok();
+  if (t && t.exp > Date.now() + 60000) return t.access;
+  if (t && t.refresh) { try { await msTokenRequest({ grant_type: "refresh_token", refresh_token: t.refresh }); return msTok().access; } catch (e) { localStorage.removeItem("sc_ms_tok"); } }
+  const err = new Error("Bei OneDrive nicht angemeldet."); err.login = true; throw err;
+}
+async function msFetch(path, o = {}) {
+  const tok = await msToken();
+  const r = await fetch(/^https?:/.test(path) ? path : MS_GRAPH + path, { ...o, headers: { Authorization: "Bearer " + tok, ...(o.headers || {}) } });
+  if (!r.ok) { const e = new Error("OneDrive " + r.status + ": " + (await r.text().catch(() => "")).slice(0, 140)); e.status = r.status; throw e; }
+  return r;
+}
+function msSetup() {
+  const bg = dialog(`<h2>OneDrive einrichten</h2><div class="sub">Dafür braucht die App einmalig eine <b>Anwendungs-ID</b> aus Microsoft Entra (App-Registrierung, „Mobile und Desktopanwendungen“/Single-Page-Anwendung, Berechtigung <b>Files.ReadWrite</b>).</div>
+    <input id="m-cid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false" value="${esc(msClientId())}">
+    <div class="sub">Umleitungsadresse, die dort eingetragen sein muss:<br><b style="word-break:break-all">${esc(msRedirect())}</b></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end"><button data-x>Abbrechen</button><button class="pri" id="m-ok">Speichern &amp; anmelden</button></div>`);
+  bg.querySelector("#m-ok").onclick = () => {
+    const v = bg.querySelector("#m-cid").value.trim();
+    if (!/^[0-9a-f-]{30,40}$/i.test(v)) { toast("Das sieht nicht wie eine Anwendungs-ID aus."); return; }
+    localStorage.setItem("sc_ms_cid", v); bg.remove(); msLogin("");
+  };
+}
+// Hochladen – bei gleichem Namen wird umbenannt, nie ueberschrieben
+async function msUpload(folderId, name, bytes) {
+  const base = folderId ? "/me/drive/items/" + folderId + ":/" : "/me/drive/root:/", target = base + msEnc(name) + ":";
+  if (bytes.length <= 3.5e6) {
+    return (await msFetch(target + "/content?@microsoft.graph.conflictBehavior=rename", { method: "PUT", headers: { "Content-Type": "application/pdf" }, body: bytes })).json();
+  }
+  const s = await (await msFetch(target + "/createUploadSession", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }) })).json();
+  const CH = 327680 * 10; let item;
+  for (let a = 0; a < bytes.length; a += CH) {
+    const b = Math.min(a + CH, bytes.length);
+    const r = await fetch(s.uploadUrl, { method: "PUT", headers: { "Content-Range": `bytes ${a}-${b - 1}/${bytes.length}` }, body: bytes.slice(a, b) });
+    if (!r.ok && r.status !== 202) throw new Error("Upload fehlgeschlagen (" + r.status + ")");
+    if (b === bytes.length) item = await r.json();
+  }
+  return item;
+}
+
+// ---- Ordner-Auswahl
+const recents = () => { try { return JSON.parse(localStorage.getItem("sc_folders") || "[]"); } catch (e) { return []; } };
+function rememberFolder(f) { const l = [f, ...recents().filter(x => x.id !== f.id)].slice(0, 6); localStorage.setItem("sc_folders", JSON.stringify(l)); }
+function pickFolder() {
+  return new Promise((res) => {
+    const stack = [{ id: null, name: "OneDrive" }]; show("fold");
+    const cwd = () => stack[stack.length - 1];
+    const done = (v) => { show("pages"); res(v); };
+    const render = async () => {
+      $("f-title").textContent = cwd().name; $("f-up").disabled = stack.length < 2;
+      const L = $("flist"); L.innerHTML = `<div class="sub" style="padding:8px">lade …</div>`;
+      try {
+        let url = (cwd().id ? "/me/drive/items/" + cwd().id : "/me/drive/root") + "/children?$top=200&$select=id,name,folder", items = [];
+        while (url) { const j = await (await msFetch(url)).json(); items.push(...j.value.filter(x => x.folder)); url = j["@odata.nextLink"] || null; }
+        items.sort((a, b) => a.name.localeCompare(b.name, "de"));
+        L.innerHTML = items.length ? "" : `<div class="sub" style="padding:8px">Keine Unterordner. Mit „Hier speichern“ wird in diesen Ordner gespeichert.</div>`;
+        for (const it of items) { const b = document.createElement("button"); b.textContent = "📁  " + it.name; b.onclick = () => { stack.push({ id: it.id, name: it.name }); render(); }; L.append(b); }
+      } catch (e) { L.innerHTML = `<div class="sub" style="padding:8px">${esc(e.message)}</div>`; }
+    };
+    $("f-up").onclick = () => { if (stack.length > 1) { stack.pop(); render(); } };
+    $("f-x").onclick = () => done(null);
+    $("f-here").onclick = () => done({ id: cwd().id, name: cwd().name, path: stack.map(s => s.name).join(" › ") });
+    $("f-new").onclick = async () => {
+      const n = await ask("Neuer Ordner", "", "Anlegen"); if (!n) return;
+      try {
+        await msFetch((cwd().id ? "/me/drive/items/" + cwd().id : "/me/drive/root") + "/children", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n.replace(/[<>:"/\\|?*]/g, "_"), folder: {}, "@microsoft.graph.conflictBehavior": "fail" }) });
+        render();
+      } catch (e) { toast("Ordner konnte nicht angelegt werden: " + e.message, 6000); }
+    };
+    render();
+  });
+}
+
+// ---- Speichern
+const stamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, "0"); return `Scan ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}`; };
+function saveDialog() {
+  if (!S.pages.length) return;
+  const rec = recents();
+  const bg = dialog(`<h2>Als PDF ablegen</h2>
+    <input id="s-name" autocomplete="off" value="${esc(S.lastName || stamp())}">
+    ${rec.length ? `<div class="sub">Zuletzt verwendete Ordner</div><div class="list" id="s-rec">${rec.map((f, i) => `<button data-i="${i}">📁 ${esc(f.name)}<small>${esc(f.path || "")}</small></button>`).join("")}</div>` : ""}
+    <button class="pri" id="s-pick">Ordner in OneDrive wählen …</button>
+    <button id="s-share">Teilen / In „Dateien“ sichern</button>
+    <button data-x>Abbrechen</button>`);
+  const name = () => (bg.querySelector("#s-name").value.trim().replace(/[<>:"/\\|?*]/g, "_").replace(/\.pdf$/i, "") || stamp()) + ".pdf";
+  const needLogin = async () => {
+    if (!msClientId()) { bg.remove(); msSetup(); return true; }
+    if (!msLoggedIn()) { bg.remove(); if (confirm("Zum Anmelden verlässt die App kurz die Seite – deine Scans bleiben erhalten. Jetzt anmelden?")) { await savePending(); msLogin("save"); } return true; }
+    return false;
+  };
+  const upload = async (folder, fname) => {
+    toast("Erzeuge PDF …", 30000);
+    try {
+      const bytes = await exportPdf(); toast("Lade in OneDrive hoch …", 30000);
+      const item = await msUpload(folder.id, fname, bytes);
+      rememberFolder(folder); S.pages = []; S.lastName = null;
+      dialog(`<h2>Gespeichert ✓</h2><div class="sub">${esc(item && item.name || fname)}<br>in ${esc(folder.path || folder.name)}</div><button class="pri" data-x id="s-new">Nächster Scan</button>`).querySelector("#s-new").addEventListener("click", () => show("home"));
+      toast("Fertig", 1200);
+    } catch (e) { show("pages"); toast("Speichern fehlgeschlagen: " + e.message, 9000); }
+  };
+  bg.querySelector("#s-pick").onclick = async () => {
+    const fname = name(); S.lastName = fname.replace(/\.pdf$/i, "");
+    if (await needLogin()) return;
+    bg.remove(); const f = await pickFolder(); if (!f) { saveDialog(); return; }
+    upload(f, fname);
+  };
+  const recEl = bg.querySelector("#s-rec");
+  if (recEl) recEl.onclick = async (e) => { const b = e.target.closest("button"); if (!b) return; const fname = name(); if (await needLogin()) return; bg.remove(); upload(rec[+b.dataset.i], fname); };
+  bg.querySelector("#s-share").onclick = async () => {
+    const fname = name(); bg.remove(); toast("Erzeuge PDF …", 20000);
+    try {
+      const bytes = await exportPdf(), file = new File([bytes], fname, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: fname }); }
+      else { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = fname; a.click(); }
+      toast("Fertig", 1500);
+    } catch (e) { if (e.name !== "AbortError") toast("Teilen fehlgeschlagen: " + e.message, 6000); }
+  };
+}
+
+// ---- Scans ueber die Microsoft-Anmeldung hinweg zwischenspeichern
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open("scanner", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function idbSet(k, v) { const d = await idb(); return new Promise((res) => { const t = d.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); t.oncomplete = () => res(); t.onerror = () => res(); }); }
+async function idbGet(k) { const d = await idb(); return new Promise((res) => { const t = d.transaction("kv").objectStore("kv").get(k); t.onsuccess = () => res(t.result); t.onerror = () => res(undefined); }); }
+async function savePending() { await idbSet("pending", S.pages.map(p => ({ blob: p.blob, filter: p.filter, rot: p.rot }))); }
+async function restorePending() {
+  const l = await idbGet("pending"); if (!l || !l.length) return; await idbSet("pending", null);
+  for (const p of l) { const c = await blobToCanvas(p.blob); S.pages.push({ blob: p.blob, small: cloneCanvas(c, 420), filter: p.filter, rot: p.rot }); }
+}
+
+// ======================================================================== Start
+function refreshHome() {
+  $("msstat").textContent = msLoggedIn() ? "OneDrive: verbunden ✓" : msClientId() ? "OneDrive: nicht angemeldet" : "OneDrive: noch nicht eingerichtet";
+  $("h-ms").textContent = msLoggedIn() ? "Von OneDrive abmelden" : "OneDrive verbinden";
+  const b = $("h-pages"); b.style.display = S.pages.length ? "" : "none"; b.textContent = "Aktueller Scan (" + S.pages.length + " Seiten)";
+}
+$("h-scan").onclick = openCamera; $("h-photo").onclick = pickPhotos; $("h-pages").onclick = openPages;
+$("h-ms").onclick = () => { if (msLoggedIn()) { localStorage.removeItem("sc_ms_tok"); refreshHome(); toast("Abgemeldet"); } else msLogin(""); };
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+refreshHome(); msHandleRedirect();
+window.__sc = { detectQuad, warpQuad, applyFilter, buildPdf, squareToQuad, S };
+</script>
+</body>
+</html>
