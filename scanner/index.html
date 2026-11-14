@@ -143,7 +143,10 @@ const $ = (id) => document.getElementById(id);
 const S = { pages: [], src: null, quad: null, queue: [], fromCam: false, filter: localStorage.getItem("sc_filter") || "doc", stream: null, auto: localStorage.getItem("sc_auto") !== "0" };
 let toastT;
 function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(toastT); toastT = setTimeout(() => t.style.display = "none", ms || 3500); }
-function show(id) { document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); if (id === "home") refreshHome(); }
+// Eingebettet in PDF Notizen (iframe, ?embed=1): Start direkt in der Kamera, Ergebnis geht per postMessage ans Hauptprogramm
+const EMBED = new URLSearchParams(location.search).has("embed");
+function embedClose() { parent.postMessage({ pn: "scan-close" }, location.origin); }
+function show(id) { if (EMBED && id === "home") { embedClose(); return; } document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); if (id === "home") refreshHome(); }
 function dialog(html) {
   const bg = document.createElement("div"); bg.className = "mbg"; bg.innerHTML = `<div class="m">${html}</div>`;
   bg.addEventListener("click", (e) => { if (e.target === bg || e.target.hasAttribute("data-x")) bg.remove(); });
@@ -378,7 +381,7 @@ async function openCamera() {
   try {
     S.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
   } catch (e) {
-    show("home"); toast("Kamera nicht verfügbar – ich öffne die Kamera-App.", 4500); setTimeout(() => $("fcap").click(), 300); return;
+    if (!EMBED) show("home"); toast("Kamera nicht verfügbar – ich öffne die Kamera-App.", 4500); setTimeout(() => $("fcap").click(), 300); return;
   }
   vid.srcObject = S.stream; try { await vid.play(); } catch (e) {}
   stable = 0; lastQ = null; shooting = false;
@@ -506,7 +509,17 @@ function openPages() {
 }
 $("p-back").onclick = openCamera; $("p-more").onclick = openCamera;
 $("p-clear").onclick = () => { if (confirm("Alle Seiten verwerfen?")) { S.pages = []; show("home"); } };
-$("p-save").onclick = saveDialog;
+$("p-save").onclick = () => EMBED ? embedSend() : saveDialog();
+async function embedSend() {
+  if (!S.pages.length) return;
+  $("p-save").disabled = true; toast("Erzeuge PDF …", 30000);
+  try {
+    const bytes = await exportPdf();
+    parent.postMessage({ pn: "scan-pdf", bytes, name: stamp() + ".pdf", n: S.pages.length }, location.origin, [bytes.buffer]);
+    S.pages = [];
+  } catch (e) { toast("Fehler: " + e.message, 8000); }
+  $("p-save").disabled = false;
+}
 
 // ======================================================================== OneDrive (Microsoft Graph, Anmeldung per PKCE – kein Server, kein Passwort)
 const msClientId = () => localStorage.getItem("sc_ms_cid") || MS_CLIENT_ID;
@@ -681,8 +694,9 @@ function refreshHome() {
 }
 $("h-scan").onclick = openCamera; $("h-photo").onclick = pickPhotos; $("h-pages").onclick = openPages;
 $("h-ms").onclick = () => { if (msLoggedIn()) { localStorage.removeItem("sc_ms_tok"); refreshHome(); toast("Abgemeldet"); } else msLogin(""); };
-if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+if (!EMBED && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
 refreshHome(); msHandleRedirect();
+if (EMBED) { $("p-save").textContent = "In PDF Notizen einfügen"; openCamera(); }
 window.__sc = { detectQuad, warpQuad, applyFilter, buildPdf, squareToQuad, S };
 </script>
 </body>
