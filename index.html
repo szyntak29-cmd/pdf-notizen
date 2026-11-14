@@ -108,6 +108,10 @@ body.reading #view{left:0!important;right:0!important;top:0!important;bottom:0!i
 .pgd-c{position:relative;cursor:pointer;text-align:center;padding:4px;border:3px solid transparent;border-radius:6px}
 .pgd-c canvas{display:block;margin:0 auto;max-width:100%;background:#fff;box-shadow:1px 2px 4px rgba(0,0,0,.3)}
 .pgd-c span{font-size:12px;color:var(--sub)}
+.pgd-c{user-select:none;-webkit-user-select:none}
+.pgd-c.drag{opacity:.4}
+.pgd-c.dropb{box-shadow:-7px 0 0 var(--accent)}
+.pgd-c.dropa{box-shadow:7px 0 0 var(--accent)}
 .pgd-c.on{border-color:var(--accent);background:var(--active)}
 .pgd-c.on::after{content:"✓";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;line-height:20px}
 .fm-quick{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}.fm-quick .btn{padding:6px 14px;font-size:13px}
@@ -4771,7 +4775,7 @@ document.addEventListener("fullscreenchange", () => { if (st.reading && !documen
 function pagesDlg() {
   if (!st.pages.length) { toast("Erst ein Dokument öffnen."); return; }
   commitEditor();
-  let sel = new Set(st.thumbSel || []), anchor = null, busy = false, token = 0;
+  let sel = new Set(st.thumbSel || []), anchor = null, busy = false, token = 0, dragIdx = null;
   const bg = modal(`<div class="pgd-bar">
       <button class="btn sec" data-a="all">Alle</button><button class="btn sec" data-a="none">Keine</button><span class="hsep"></span>
       <button class="btn sec" data-a="back">← Nach vorne</button><button class="btn sec" data-a="fwd">Nach hinten →</button><span class="hsep"></span>
@@ -4779,10 +4783,24 @@ function pagesDlg() {
       <button class="btn sec" data-a="exp">Exportieren…</button><button class="btn sec" data-a="del" style="color:#d33">Löschen</button>
     </div><div class="pgd-grid" id="pgd-grid"></div><p class="mhint" id="pgd-msg" style="margin:8px 0 0"></p>
     <div class="foot" style="margin-top:12px"><button class="btn" data-x>Fertig</button></div>`,
-    { title: "Seiten verwalten", sub: "Seiten antippen = auswählen (mehrere möglich) – dann verschieben, drehen, exportieren oder löschen" });
+    { title: "Seiten verwalten", sub: "Seiten antippen = auswählen (mehrere möglich) – zum Verschieben an die gewünschte Stelle ziehen, oder drehen, exportieren, löschen" });
   bg.querySelector(".modal").classList.add("wide");
   const grid = bg.querySelector("#pgd-grid"), msg = bg.querySelector("#pgd-msg");
   const btns = [...bg.querySelectorAll(".pgd-bar [data-a]")];
+  function clearMarks(keepDrag) { grid.querySelectorAll(".dropb,.dropa" + (keepDrag ? "" : ",.drag")).forEach(x => x.classList.remove("dropb", "dropa", ...(keepDrag ? [] : ["drag"]))); }
+  // Ziehen ueber leere Flaeche / Rand: ans Ende legen bzw. automatisch scrollen
+  grid.ondragover = (e) => {
+    if (!dragIdx) return;
+    e.preventDefault();
+    const r = grid.getBoundingClientRect();
+    if (e.clientY < r.top + 40) grid.scrollTop -= 18; else if (e.clientY > r.bottom - 40) grid.scrollTop += 18;
+  };
+  grid.ondrop = (e) => {
+    if (!dragIdx) return;
+    e.preventDefault();
+    const mv = dragIdx; dragIdx = null; clearMarks();
+    run(async () => { const nw = await movePages(mv, st.pages.length); if (nw) { sel = new Set(nw); anchor = null; } });
+  };
   function upd() {
     msg.textContent = sel.size ? sel.size + " von " + st.pages.length + " Seiten ausgewählt" : "Keine Seite ausgewählt";
     btns.forEach(b => { if (!["all", "none"].includes(b.dataset.a)) b.disabled = !sel.size || busy; });
@@ -4799,6 +4817,29 @@ function pagesDlg() {
         if (e.shiftKey && anchor != null) { for (let k = Math.min(anchor, i); k <= Math.max(anchor, i); k++) sel.add(k); }
         else { sel.has(i) ? sel.delete(i) : sel.add(i); anchor = i; }
         upd();
+      };
+      // Ziehen = Seiten an eine andere Stelle verschieben (ausgewaehlte Seiten zusammen)
+      d.draggable = true;
+      d.ondragstart = (e) => {
+        if (busy) { e.preventDefault(); return; }
+        if (!sel.has(i)) { sel = new Set([i]); anchor = i; upd(); }
+        dragIdx = [...sel].sort((x, y) => x - y);
+        e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", "pn-pages"); } catch (er) {}
+        grid.querySelectorAll(".pgd-c").forEach(x => x.classList.toggle("drag", sel.has(+x.dataset.i)));
+      };
+      d.ondragend = () => { dragIdx = null; clearMarks(); };
+      d.ondragover = (e) => {
+        if (!dragIdx) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = "move";
+        const r = d.getBoundingClientRect(), before = e.clientX < r.left + r.width / 2;
+        clearMarks(true); d.classList.add(before ? "dropb" : "dropa");
+      };
+      d.ondrop = (e) => {
+        if (!dragIdx) return;
+        e.preventDefault(); e.stopPropagation();
+        const r = d.getBoundingClientRect(), before = e.clientX < r.left + r.width / 2, mv = dragIdx;
+        dragIdx = null; clearMarks();
+        run(async () => { const nw = await movePages(mv, before ? i : i + 1); if (nw) { sel = new Set(nw); anchor = null; } });
       };
       return { c, i, pg, dw };
     });
