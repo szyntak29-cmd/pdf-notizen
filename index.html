@@ -2447,9 +2447,14 @@ const apM = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]
 async function findRuleLines(i) {
   const pg = st.pages[i];
   if (pg.rules) return pg.rules;
-  const hs = [], vs = [], dots = [], chars = [];
+  const hs = [], vs = [], vc = [], dots = [], chars = [];     // vc: auch kurze senkrechte Linien (Tabellenzellen)
   const addRect = (x0, y0, x1, y1, stroked) => {
     const w = x1 - x0, h = y1 - y0;
+    if (w <= 2.5 && h >= 4) vc.push([(x0 + x1) / 2, y0, y1]);
+    else if (stroked && w >= 4 && h >= 4) {
+      vc.push([x0, y0, y1]); vc.push([x1, y0, y1]);
+      if (w >= 14 && h >= 10 && !(w >= 25 && h >= 8)) { hs.push([y0, x0, x1]); hs.push([y1, x0, x1]); }     // kleine Tabellenzellen: Kanten zaehlen als Linien
+    }
     if (w <= 6 && h <= 4) dots.push([(y0 + y1) / 2, x0, x1, false]);
     else if (h <= 2.5 && w >= 25) hs.push([(y0 + y1) / 2, x0, x1]);
     else if (w <= 2.5 && h >= 25) vs.push([(x0 + x1) / 2, y0, y1]);
@@ -2509,6 +2514,7 @@ async function findRuleLines(i) {
             for (let k2 = 0; k2 < P.length - 1; k2++) segs.push([P[k2], P[k2 + 1]]);
             if (s.closed) segs.push([P[P.length - 1], P[0]]);
             for (const [A, B] of segs) {
+              if (Math.abs(A[0] - B[0]) < 0.8 && Math.abs(A[1] - B[1]) >= 4) vc.push([(A[0] + B[0]) / 2, Math.min(A[1], B[1]), Math.max(A[1], B[1])]);
               if (Math.abs(A[1] - B[1]) < 0.8) {
                 if (Math.abs(A[0] - B[0]) >= 25) hs.push([(A[1] + B[1]) / 2, Math.min(A[0], B[0]), Math.max(A[0], B[0])]);
                 else dots.push([(A[1] + B[1]) / 2, Math.min(A[0], B[0]), Math.max(A[0], B[0]), false]);
@@ -2526,7 +2532,7 @@ async function findRuleLines(i) {
     else chars.push([c.x0, c.y0, c.x1, c.y1, c.size, c.base]);
   }
   const all = hs.concat(dotRows(dots));
-  pg.rules = { hs: mergeSegments(all), vs, chars };
+  pg.rules = { hs: mergeSegments(all), vs, vc, chars };
   return pg.rules;
 }
 function snapOn() { return st.snapLines !== false; }
@@ -2535,7 +2541,7 @@ async function lineSnap(i, p, sz) {
   if (!snapOn()) return null;
   const pg = st.pages[i];
   if (pg.rot) return null;
-  const { hs, vs, chars } = await findRuleLines(i);
+  const { hs, vs, vc, chars } = await findRuleLines(i);
   if (!hs.length) return null;
   const [x, y] = p;
   const reach = Math.max(34, 2.4 * sz);
@@ -2580,7 +2586,7 @@ async function lineSnap(i, p, sz) {
   }
   // weitere Schreiblinien darunter: Zeilenabstand = Abstand zur naechsten Linie (Text bleibt beim Weiterschreiben auf den Linien)
   if (!lh && !step && below.length) { const nb = Math.min(...below); if (nb >= newSz * 1.1 && nb <= Math.max(80, 5 * newSz)) lh = nb; }
-  let start, end;
+  let start, end, cellMode = false;
   if (step) {
     const nx = xs.reduce((a, b) => Math.abs(b - x) < Math.abs(a - x) ? b : a);
     start = Math.abs(nx - x) <= step ? nx + 2 : x;
@@ -2591,9 +2597,9 @@ async function lineSnap(i, p, sz) {
     if (x > start + Math.max(60, 0.35 * (x1 - start))) start = x;
     end = x1 - 2;
     // Tabelle: Feld auf die angeklickte Zelle begrenzen (nicht ueber die ganze Tabellenbreite)
-    const cuts = vs.filter(v => v[1] - 2 <= ly && ly <= v[2] + 2 && x0 - 2 <= v[0] && v[0] <= x1 + 2).map(v => v[0]).sort((a, b) => a - b);
+    const cuts = (vc || vs).filter(v => v[1] - 2 <= ly && ly <= v[2] + 2 && x0 - 2 <= v[0] && v[0] <= x1 + 2).map(v => v[0]).sort((a, b) => a - b);
     const cl = cuts.filter(v => v <= x + 1).pop(), cr = cuts.find(v => v > x + 1);
-    if (cl != null && cr != null && cr - cl < 0.7 * (x1 - x0)) { start = cl + 3; end = cr - 3; }
+    if (cl != null && cr != null && cr - cl < 0.7 * (x1 - x0)) { start = cl + 3; end = cr - 3; cellMode = true; }
   }
   if (row.length) {
     const groups = [];
@@ -2607,7 +2613,7 @@ async function lineSnap(i, p, sz) {
     if (right.length) end = Math.min(end, Math.min(...right) - 4);
   }
   const base = row.length ? median(row.map(c => c[5])) : ly - Math.max(1.5, 0.15 * newSz);
-  return { base, lh, x: start, w: Math.max(30, end - start), sz: newSz, line: ly };
+  return { base, lh, x: start, w: Math.max(cellMode ? 12 : 30, end - start), sz: newSz, line: ly };
 }
 const firstBaseOff = (sz, lh) => ((lh || sz * 1.25) - (ASC + DESC) * sz) / 2 + ASC * sz;
 
