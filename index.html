@@ -2042,6 +2042,7 @@ async function textAt(i, p) {
   const sz = defaultStyle().sz;
   let snap = null;
   try { snap = await lineSnap(i, p, sz); } catch (e) { console.warn(e); }
+  if (snap && snap.cell) { openEditor(i, null, { x: snap.x, y: r3(snap.cell.top + 1), w: snap.w, fit: { h: snap.cell.h - 2, sz: snap.sz } }); return; }
   if (snap) { openEditor(i, null, { x: snap.x, y: 0, w: snap.w, snap }); return; }
   const w = Math.max(160, Math.min(pg.w - p[0] - 30, pg.w * 0.62));
   openEditor(i, null, { x: p[0], y: p[1] - sz * 0.62, w });
@@ -2072,11 +2073,14 @@ function openEditor(i, item, pos) {
   } else {
     meta = { kind: "text", lines: [], w: pos.w, rect: [pos.x, pos.y, pos.x + pos.w, pos.y + 20] };
     if (pos.snap) { meta.base = pos.snap.base; meta.line = pos.snap.line; if (pos.snap.lh) meta.lh = pos.snap.lh; }
+    if (pos.fit) meta.fh = r3(pos.fit.h);
   }
   const div = document.createElement("div");
   div.className = "ed"; div.contentEditable = "true"; div.spellcheck = false;
   const ds = defaultStyle();
   if (pos && pos.snap) ds.sz = pos.snap.sz;
+  if (pos && pos.fit) ds.sz = pos.fit.sz;
+  if (item && meta.fh) { const zs = (meta.lines || []).flatMap(l => (l.runs || []).map(r => +(r[1] && r[1].sz) || 0)).filter(Boolean); if (zs.length) ds.sz = Math.max(...zs); }   // Zelle: Grundgroesse = gespeicherte Schrift
   div.style.fontSize = ds.sz + "px"; div.style.color = ds.fg;
   if (meta.lh) div.style.lineHeight = meta.lh + "px"; else div.style.lineHeight = "1.25";
   div.innerHTML = linesToHtml(meta.lines);
@@ -2084,7 +2088,7 @@ function openEditor(i, item, pos) {
   const mv = document.createElement("div"); mv.className = "edh mv"; mv.title = "Verschieben";
   const wd = document.createElement("div"); wd.className = "edh wd"; wd.title = "Breite ändern";
   pg.pin.append(mv, wd);
-  st.ed = { i, item, meta, div, mv, wd, x: meta.rect[0], y: meta.rect[1], w: meta.w || (meta.rect[2] - meta.rect[0]), moved: false, sz0: ds.sz,
+  st.ed = { i, item, meta, div, mv, wd, x: meta.rect[0], y: meta.rect[1], w: meta.w || (meta.rect[2] - meta.rect[0]), moved: false, sz0: ds.sz, fit: meta.fh ? { h: +meta.fh, sz: ds.sz } : null,
             snap: meta.base != null ? { base: +meta.base, lh: meta.lh || null, line: meta.line != null ? +meta.line : null } : null };
   // Grundlinie (z. B. auf Schreiblinien) wie im gespeicherten Block
   if (meta.base != null) {
@@ -2094,7 +2098,7 @@ function openEditor(i, item, pos) {
   }
   placeEditor();
   try { document.execCommand("styleWithCSS", false, true); document.execCommand("defaultParagraphSeparator", false, "p"); } catch (e) {}
-  div.addEventListener("input", () => { st.ed && (st.ed.changed = true); });
+  div.addEventListener("input", () => { st.ed && (st.ed.changed = true); textFit(); });
   div.addEventListener("paste", (e) => {
     e.preventDefault();
     const t = (e.clipboardData || window.clipboardData).getData("text/plain");
@@ -2112,6 +2116,17 @@ function openEditor(i, item, pos) {
   rng.selectNodeContents(div); rng.collapse(false); sel.removeAllRanges(); sel.addRange(rng);
   buildTextBar();
 }
+// Zelle / Rechteck: Schrift verkleinert sich automatisch, damit der Text in die Hoehe der Zelle passt
+function textFit() {
+  const e = st.ed; if (!e || !e.fit) return;
+  const d = e.div;
+  if (!e.fitBase) e.fitBase = parseFloat(d.style.fontSize) || e.fit.sz;
+  d.querySelectorAll("[style*='font-size']").forEach(el => { if (el.dataset.fs0 == null) el.dataset.fs0 = parseFloat(el.style.fontSize) || ""; });
+  const apply = (sc) => { d.style.fontSize = (e.fitBase * sc) + "px"; d.querySelectorAll("[data-fs0]").forEach(el => { if (el.dataset.fs0) el.style.fontSize = (+el.dataset.fs0 * sc) + "px"; }); };
+  let sc = 1; apply(1);
+  while (d.scrollHeight > e.fit.h + 0.5 && sc > 0.35) { sc = Math.round((sc - 0.03) * 100) / 100; apply(sc); }
+  placeEditor();
+}
 function placeEditor() {
   const e = st.ed, z = st.zoom;
   Object.assign(e.div.style, { left: (e.x * z) + "px", top: (e.y * z) + "px", width: e.w + "px", transform: `scale(${z})` });
@@ -2128,6 +2143,7 @@ function edDrag(e) {
   if (ptr.mode === "edmove") { d.x = ptr.ox + dx; d.y = ptr.oy + dy; }
   else d.w = Math.max(30, ptr.ow + dx);
   d.moved = true;
+  if (d.fit) textFit();
   placeEditor();
 }
 async function edResnap() {
@@ -2215,6 +2231,7 @@ function commitEditor() {
   let after = [];
   if (hasText) {
     const meta = { kind: "text", lines };
+    if (e.fit) meta.fh = r3(e.fit.h);
     if (e.snap) {
       if (e.snap.lh) meta.lh = r3(e.snap.lh);
       meta.base = r3(e.snap.base);
@@ -2613,7 +2630,7 @@ async function lineSnap(i, p, sz) {
     if (right.length) end = Math.min(end, Math.min(...right) - 4);
   }
   const base = row.length ? median(row.map(c => c[5])) : ly - Math.max(1.5, 0.15 * newSz);
-  return { base, lh, x: start, w: Math.max(cellMode ? 12 : 30, end - start), sz: newSz, line: ly };
+  return { base, lh, x: start, w: Math.max(cellMode ? 12 : 30, end - start), sz: newSz, line: ly, cell: cellMode && pitch ? { top: ly - pitch, h: pitch } : null };
 }
 const firstBaseOff = (sz, lh) => ((lh || sz * 1.25) - (ASC + DESC) * sz) / 2 + ASC * sz;
 
