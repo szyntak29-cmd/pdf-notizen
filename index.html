@@ -2573,6 +2573,10 @@ async function lineSnap(i, p, sz) {
     for (const v of vs) if (x0 + 1 < v[0] && v[0] < x0 + 80 && v[1] - 2 <= ly && ly <= v[2] + 2) start = Math.max(start, v[0] + 5);
     if (x > start + Math.max(60, 0.35 * (x1 - start))) start = x;
     end = x1 - 2;
+    // Tabelle: Feld auf die angeklickte Zelle begrenzen (nicht ueber die ganze Tabellenbreite)
+    const cuts = vs.filter(v => v[1] - 2 <= ly && ly <= v[2] + 2 && x0 - 2 <= v[0] && v[0] <= x1 + 2).map(v => v[0]).sort((a, b) => a - b);
+    const cl = cuts.filter(v => v <= x + 1).pop(), cr = cuts.find(v => v > x + 1);
+    if (cl != null && cr != null && cr - cl < 0.7 * (x1 - x0)) { start = cl + 3; end = cr - 3; }
   }
   if (row.length) {
     const groups = [];
