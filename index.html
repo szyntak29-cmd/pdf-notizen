@@ -191,6 +191,7 @@ body.t-radierer .page{cursor:none}
 .ed p{margin:0}
 .ted{position:absolute;transform-origin:0 0;outline:1.5px dashed var(--accent);outline-offset:2px;z-index:5;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a}
 .ted td:focus{box-shadow:inset 0 0 0 2px var(--accent)}
+.edh.sz{cursor:nwse-resize;border-radius:3px}
 .tbo{padding:0 10px;font-weight:600;font-size:12.5px;color:var(--icon);white-space:nowrap;border:0;border-radius:8px;background:transparent;cursor:pointer;height:30px}
 .tbo:hover{background:var(--hover)}
 .edh{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:6;touch-action:none}
@@ -1749,7 +1750,7 @@ window.addEventListener("pointermove", (e) => {
     drawOverlay(st.sel.i, (c) => { c.save(); c.translate(ptr.d[0], ptr.d[1]); for (const it of st.sel.items) drawItem(c, it); c.restore(); });
     return;
   }
-  if (ptr.mode === "edmove" || ptr.mode === "edwidth") { edDrag(e); return; }
+  if (ptr.mode === "edmove" || ptr.mode === "edwidth" || ptr.mode === "edscale") { edDrag(e); return; }
   if (ptr.mode === "tmove" || ptr.mode === "twidth") { tedDrag(e); return; }
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for (const ev of (evs.length ? evs : [e])) {
@@ -1817,7 +1818,7 @@ function endPtr(e) {
     else drawOverlay(st.sel.i);
   } else if (P.mode === "tmove" || P.mode === "twidth") {
     if (st.ted) tedFocus(st.ted.cur);
-  } else if (P.mode === "edmove" || P.mode === "edwidth") {
+  } else if (P.mode === "edmove" || P.mode === "edwidth" || P.mode === "edscale") {
     if (st.ed) { if (P.mode === "edmove") edResnap(); st.ed.div.focus(); }
   }
 }
@@ -2080,15 +2081,16 @@ function openEditor(i, item, pos) {
   const ds = defaultStyle();
   if (pos && pos.snap) ds.sz = pos.snap.sz;
   if (pos && pos.fit) ds.sz = pos.fit.sz;
-  if (item && meta.fh) { const zs = (meta.lines || []).flatMap(l => (l.runs || []).map(r => +(r[1] && r[1].sz) || 0)).filter(Boolean); if (zs.length) ds.sz = Math.max(...zs); }   // Zelle: Grundgroesse = gespeicherte Schrift
+  if (item) { const zs = (meta.lines || []).flatMap(l => (l.runs || []).map(r => +(r[1] && r[1].sz) || 0)).filter(Boolean); if (zs.length) ds.sz = Math.max(...zs); }   // Zelle: Grundgroesse = gespeicherte Schrift
   div.style.fontSize = ds.sz + "px"; div.style.color = ds.fg;
   if (meta.lh) div.style.lineHeight = meta.lh + "px"; else div.style.lineHeight = "1.25";
   div.innerHTML = linesToHtml(meta.lines);
   pg.pin.append(div);
   const mv = document.createElement("div"); mv.className = "edh mv"; mv.title = "Verschieben";
   const wd = document.createElement("div"); wd.className = "edh wd"; wd.title = "Breite ändern";
-  pg.pin.append(mv, wd);
-  st.ed = { i, item, meta, div, mv, wd, x: meta.rect[0], y: meta.rect[1], w: meta.w || (meta.rect[2] - meta.rect[0]), moved: false, sz0: ds.sz, fit: meta.fh ? { h: +meta.fh, sz: ds.sz } : null,
+  const szh = document.createElement("div"); szh.className = "edh sz"; szh.title = "Größe ändern (Schrift wird mit vergrößert/verkleinert)";
+  pg.pin.append(mv, wd, szh);
+  st.ed = { i, item, meta, div, mv, wd, szh, x: meta.rect[0], y: meta.rect[1], w: meta.w || (meta.rect[2] - meta.rect[0]), moved: false, sz0: ds.sz, fit: meta.fh ? { h: +meta.fh, sz: ds.sz } : null,
             snap: meta.base != null ? { base: +meta.base, lh: meta.lh || null, line: meta.line != null ? +meta.line : null } : null };
   // Grundlinie (z. B. auf Schreiblinien) wie im gespeicherten Block
   if (meta.base != null) {
@@ -2105,9 +2107,10 @@ function openEditor(i, item, pos) {
     document.execCommand("insertText", false, t);
   });
   div.addEventListener("keyup", updateTextBar); div.addEventListener("mouseup", updateTextBar);
-  for (const [h, mode] of [[mv, "edmove"], [wd, "edwidth"]]) h.addEventListener("pointerdown", (e) => {
+  for (const [h, mode] of [[mv, "edmove"], [wd, "edwidth"], [szh, "edscale"]]) h.addEventListener("pointerdown", (e) => {
     e.preventDefault(); e.stopPropagation();
-    ptr = { mode, x: e.clientX, y: e.clientY, ox: st.ed.x, oy: st.ed.y, ow: st.ed.w };
+    ptr = { mode, x: e.clientX, y: e.clientY, ox: st.ed.x, oy: st.ed.y, ow: st.ed.w, oh: Math.max(10, st.ed.div.offsetHeight) };
+    if (mode === "edscale") { const dv = st.ed.div; ptr.base = parseFloat(getComputedStyle(dv).fontSize) || 14; ptr.spans = [...dv.querySelectorAll("[style*='font-size']")].map(el => [el, parseFloat(el.style.fontSize) || 0]).filter(a => a[1]); }
     capture(e);
   });
   div.focus();
@@ -2134,17 +2137,30 @@ function placeEditor() {
     if (!st.ed) return;
     const h = e.div.offsetHeight * z;
     Object.assign(e.mv.style, { left: (e.x * z - 18) + "px", top: (e.y * z - 18) + "px" });
-    Object.assign(e.wd.style, { left: ((e.x + e.w) * z - 3) + "px", top: (e.y * z + h / 2 - 7) + "px" });
+    Object.assign(e.wd.style, { left: ((e.x + e.w) * z - 3) + "px", top: (e.y * z - 7) + "px" });      // Breite: rechts oben
+    if (e.szh) Object.assign(e.szh.style, { left: ((e.x + e.w) * z - 7) + "px", top: (e.y * z + h - 7) + "px" });
   });
 }
 function edDrag(e) {
   const d = st.ed; if (!d) return;
   const [dx, dy] = dPage(st.pages[d.i], (e.clientX - ptr.x) / st.zoom, (e.clientY - ptr.y) / st.zoom);
   if (ptr.mode === "edmove") { d.x = ptr.ox + dx; d.y = ptr.oy + dy; }
+  else if (ptr.mode === "edscale") { scaleEd(d, dx, dy); return; }
   else d.w = Math.max(30, ptr.ow + dx);
   d.moved = true;
   if (d.fit) textFit();
   placeEditor();
+}
+// Ecke unten rechts: Feld samt Schrift proportional groesser/kleiner ziehen (wie ein Bild)
+function scaleEd(d, dx, dy) {
+  const P = ptr, k = Math.max(0.2, Math.min(10, 1 + (dx * P.ow + dy * P.oh) / (P.ow * P.ow + P.oh * P.oh)));
+  d.fit = null; d.fitBase = undefined; d.snap = null;
+  d.div.style.lineHeight = "1.25";
+  d.div.style.fontSize = (P.base * k) + "px";
+  P.spans.forEach(([el, sz]) => { el.style.fontSize = (sz * k) + "px"; });
+  d.w = Math.max(20, P.ow * k);
+  d.moved = true; d.changed = true;
+  placeEditor(); updateTextBar();
 }
 async function edResnap() {
   const e = st.ed; if (!e) return;
@@ -2220,7 +2236,7 @@ function commitEditor() {
   if (!e) return;
   st.ed = null;
   const lines = exportLines(e.div);
-  e.div.remove(); e.mv.remove(); e.wd.remove();
+  e.div.remove(); e.mv.remove(); e.wd.remove(); if (e.szh) e.szh.remove();
   const pg = st.pages[e.i];
   const hasText = lines.some(ln => ln.runs.some(r => r[0].trim()));
   const unchanged = e.item && !e.moved && JSON.stringify(lines) === JSON.stringify(e.item.meta.lines);
